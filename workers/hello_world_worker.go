@@ -1,49 +1,114 @@
 package workers
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	"github.com/creator54/temporal-go-demo-app/config"
-	"github.com/creator54/temporal-go-demo-app/workflows/impl"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 )
 
-// StartWorker initializes and starts a Temporal worker
-func StartWorker() error {
-	// Create the client
-	c, err := config.GetTemporalClient()
-	if err != nil {
-		return err
+// HelloWorldWorkflow is a basic workflow that calls an activity
+func HelloWorldWorkflow(ctx workflow.Context, name string) (string, error) {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("[DEBUG] Starting HelloWorldWorkflow", "name", name)
+
+	options := workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
 	}
-	defer c.Close()
+	ctx = workflow.WithActivityOptions(ctx, options)
 
-	// Create a worker
-	w := worker.New(c, config.GetTaskQueue(), worker.Options{})
+	var result string
+	logger.Info("[DEBUG] Executing HelloWorldActivity")
+	err := workflow.ExecuteActivity(ctx, HelloWorldActivity, name).Get(ctx, &result)
+	if err != nil {
+		logger.Error("[ERROR] Activity execution failed", "error", err)
+		return "", err
+	}
+	logger.Info("[DEBUG] Activity execution completed successfully", "result", result)
+	return result, nil
+}
 
-	// Register workflow with the name "HelloWorldWorkflow"
-	w.RegisterWorkflowWithOptions(
-		new(impl.HelloWorldWorkflowImpl).SayHello,
-		workflow.RegisterOptions{Name: "HelloWorldWorkflow"},
-	)
+// HelloWorldActivity is a basic activity that returns a greeting
+func HelloWorldActivity(ctx context.Context, name string) (string, error) {
+	// Get the current span from context
+	span := trace.SpanFromContext(ctx)
+	log.Printf("[DEBUG] Activity span: TraceID=%s, SpanID=%s", span.SpanContext().TraceID(), span.SpanContext().SpanID())
+
+	result := fmt.Sprintf("Hello %s!", name)
+	log.Printf("[DEBUG] Activity executed with result: %s", result)
+	return result, nil
+}
+
+func StartWorker() {
+	log.Println("[DEBUG] Starting worker initialization...")
+
+	// Create the client options with tracing interceptor
+	log.Println("[DEBUG] Creating tracing interceptor...")
+	tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{})
+	if err != nil {
+		log.Fatalln("[ERROR] Unable to create tracing interceptor:", err)
+	}
+	log.Println("[DEBUG] Tracing interceptor created successfully")
+
+	// Get the current tracer
+	tracer := otel.GetTracerProvider().Tracer("temporal-worker")
+	log.Printf("[DEBUG] Using tracer: %v", tracer)
+
+	clientOptions := client.Options{
+		HostPort:     client.DefaultHostPort,
+		Interceptors: []interceptor.ClientInterceptor{tracingInterceptor},
+	}
+
+	// Initialize the Temporal client
+	log.Println("[DEBUG] Creating Temporal client...")
+	temporalClient, err := client.NewClient(clientOptions)
+	if err != nil {
+		log.Fatalln("[ERROR] Unable to create Temporal client:", err)
+	}
+	defer temporalClient.Close()
+	log.Println("[DEBUG] Temporal client created successfully")
+
+	// Create the worker options with tracing interceptor
+	workerOptions := worker.Options{
+		EnableLoggingInReplay: true,
+		Interceptors:          []interceptor.WorkerInterceptor{tracingInterceptor},
+	}
+
+	// Create a new worker
+	log.Println("[DEBUG] Creating worker...")
+	w := worker.New(temporalClient, "hello-world-task-queue", workerOptions)
+	log.Println("[DEBUG] Worker created successfully")
+
+	// Register workflow and activity
+	log.Println("[DEBUG] Registering workflow and activity...")
+	w.RegisterWorkflow(HelloWorldWorkflow)
+	w.RegisterActivity(HelloWorldActivity)
+	log.Println("[DEBUG] Workflow and activity registered successfully")
 
 	// Start the worker
+	log.Println("[DEBUG] Starting worker...")
 	err = w.Start()
 	if err != nil {
-		return err
+		log.Fatalln("[ERROR] Unable to start worker:", err)
 	}
-
-	log.Printf("Worker started for task queue: %s\n", config.GetTaskQueue())
+	log.Println("[DEBUG] Worker started successfully")
 
 	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
-
-	log.Println("Shutting down worker...")
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	<-signalChan
+	log.Println("[DEBUG] Received shutdown signal")
 	w.Stop()
-	return nil
-} 
+	log.Println("[DEBUG] Worker stopped successfully")
+}

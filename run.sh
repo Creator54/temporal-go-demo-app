@@ -3,12 +3,20 @@
 # Function to cleanup processes
 cleanup() {
     echo -e "\nCleaning up processes..."
+    # Kill the worker and all its child processes
+    if [ ! -z "$WORKER_PID" ]; then
+        pkill -P $WORKER_PID 2>/dev/null || true
+        kill -9 $WORKER_PID 2>/dev/null || true
+    fi
+    # Kill any remaining go run processes
     pkill -f "go run ." 2>/dev/null || true
+    # Wait for processes to terminate
+    sleep 1
     exit 0
 }
 
 # Set up trap for Ctrl+C (SIGINT) and SIGTERM
-trap cleanup SIGINT SIGTERM
+trap cleanup SIGINT SIGTERM EXIT
 
 # Function to check if a port is open
 check_port() {
@@ -35,6 +43,15 @@ is_temporal_cloud() {
     [ ! -z "$TEMPORAL_HOST_URL" ] || [ ! -z "$TEMPORAL_HOST_ADDRESS" ]
 }
 
+# OpenTelemetry Configuration
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
+export OTEL_RESOURCE_ATTRIBUTES="service.name=temporal-hello-world"
+
+# If SigNoz ingestion key is provided, set it
+if [ ! -z "$SIGNOZ_INGESTION_KEY" ]; then
+    export OTEL_EXPORTER_OTLP_HEADERS="signoz-ingestion-key=$SIGNOZ_INGESTION_KEY"
+fi
+
 echo "Starting application..."
 
 # Check Temporal Server (only for local development)
@@ -52,6 +69,12 @@ else
         echo "ERROR: TEMPORAL_TLS_CERT and TEMPORAL_TLS_KEY must be set for Temporal Cloud"
         exit 1
     fi
+fi
+
+# Check SigNoz/OpenTelemetry Collector
+echo "Checking SigNoz/OpenTelemetry Collector..."
+if ! check_port localhost 4317 3 2; then
+    echo "WARNING: SigNoz/OpenTelemetry Collector is not running. Metrics and traces will not be exported."
 fi
 
 # Clean existing processes
@@ -74,5 +97,5 @@ go run . start "Temporal"
 
 echo "Workflow completed."
 
-# Cleanup at the end
-cleanup 
+# Exit cleanly
+exit 0 
