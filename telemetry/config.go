@@ -67,7 +67,7 @@ func (c *Config) InitProvider(ctx context.Context) (func(), error) {
 
 	// Strip http:// or https:// prefix
 	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
-	log.Printf("[DEBUG] Using OTLP endpoint: %s (TLS: %v)", endpoint, useTLS)
+	// log.Printf("[DEBUG] Using OTLP endpoint: %s (TLS: %v)", endpoint, useTLS)
 
 	// Create resource with service information
 	hostname, _ := os.Hostname()
@@ -85,7 +85,7 @@ func (c *Config) InitProvider(ctx context.Context) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
-	log.Printf("[DEBUG] Created OpenTelemetry resource with attributes: %+v", res.Attributes())
+	// log.Printf("[DEBUG] Created OpenTelemetry resource with attributes: %+v", res.Attributes())
 
 	// Set up gRPC connection options
 	var creds credentials.TransportCredentials
@@ -109,7 +109,7 @@ func (c *Config) InitProvider(ctx context.Context) (func(), error) {
 	}
 
 	// Initialize trace exporter
-	log.Printf("[DEBUG] Creating trace exporter...")
+	// log.Printf("[DEBUG] Creating trace exporter...")
 	traceExporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(endpoint),
 		otlptracegrpc.WithHeaders(metadata),
@@ -125,7 +125,7 @@ func (c *Config) InitProvider(ctx context.Context) (func(), error) {
 		log.Printf("[ERROR] Failed to create trace exporter: %v", err)
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
-	log.Println("[DEBUG] Trace exporter created successfully")
+	// log.Println("[DEBUG] Trace exporter created successfully")
 
 	// Configure trace provider with more frequent batching
 	tracerProvider := sdktrace.NewTracerProvider(
@@ -138,10 +138,10 @@ func (c *Config) InitProvider(ctx context.Context) (func(), error) {
 		),
 	)
 	otel.SetTracerProvider(tracerProvider)
-	log.Println("[DEBUG] Tracer provider configured and set globally")
+	// log.Println("[DEBUG] Tracer provider configured and set globally")
 
 	// Initialize metrics exporter
-	log.Printf("[DEBUG] Creating metrics exporter...")
+	// log.Printf("[DEBUG] Creating metrics exporter...")
 	metricExporter, err := otlpmetricgrpc.New(ctx,
 		otlpmetricgrpc.WithEndpoint(endpoint),
 		otlpmetricgrpc.WithHeaders(metadata),
@@ -157,7 +157,7 @@ func (c *Config) InitProvider(ctx context.Context) (func(), error) {
 		log.Printf("[ERROR] Failed to create metric exporter: %v", err)
 		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
 	}
-	log.Println("[DEBUG] Metrics exporter created successfully")
+	// log.Println("[DEBUG] Metrics exporter created successfully")
 
 	// Configure metrics provider with more frequent reporting
 	meterProvider := metric.NewMeterProvider(
@@ -167,31 +167,27 @@ func (c *Config) InitProvider(ctx context.Context) (func(), error) {
 		)),
 	)
 	otel.SetMeterProvider(meterProvider)
-	log.Println("[DEBUG] Meter provider configured and set globally")
+	// log.Println("[DEBUG] Meter provider configured and set globally")
 
 	// Set global propagator
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
-	log.Println("[DEBUG] Text map propagator configured and set globally")
+	// log.Println("[DEBUG] Text map propagator configured and set globally")
 
 	// Return cleanup function
 	cleanup := func() {
-		log.Println("[DEBUG] Starting OpenTelemetry shutdown...")
+		// log.Println("[DEBUG] Starting OpenTelemetry shutdown...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		if err := tracerProvider.Shutdown(shutdownCtx); err != nil {
 			log.Printf("[ERROR] Error shutting down tracer provider: %v\n", err)
-		} else {
-			log.Println("[DEBUG] Tracer provider shut down successfully")
 		}
 
 		if err := meterProvider.Shutdown(shutdownCtx); err != nil {
 			log.Printf("[ERROR] Error shutting down meter provider: %v\n", err)
-		} else {
-			log.Println("[DEBUG] Meter provider shut down successfully")
 		}
 	}
 

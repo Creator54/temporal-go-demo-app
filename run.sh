@@ -83,7 +83,7 @@ pkill -f "go run ." 2>/dev/null || true
 sleep 2
 
 # Start the worker
-echo "Starting worker..."
+echo -e "\n=== Starting worker ==="
 go run . &
 WORKER_PID=$!
 
@@ -92,10 +92,8 @@ echo "Waiting for worker to initialize..."
 sleep 5
 
 # Start the workflow
-echo "Starting workflow with default name 'Temporal'..."
+echo -e "\n=== Executing workflow ==="
 go run . start "Temporal"
 
-echo "Workflow completed."
-
-# Exit cleanly
+echo -e "\n=== Cleanup ==="
 exit 0 

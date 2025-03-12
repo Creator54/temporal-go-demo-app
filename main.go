@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	log.Println("[DEBUG] Starting application...")
+	// log.Println("[DEBUG] Starting application...")
 
 	// Create a context that we can cancel
 	ctx, cancel := context.WithCancel(context.Background())
@@ -29,12 +29,12 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		log.Println("[DEBUG] Received shutdown signal")
+		// log.Println("[DEBUG] Received shutdown signal")
 		cancel()
 	}()
 
 	// Initialize OpenTelemetry
-	log.Println("[DEBUG] Initializing OpenTelemetry...")
+	// log.Println("[DEBUG] Initializing OpenTelemetry...")
 	config := telemetry.NewConfig()
 	cleanup, err := config.InitProvider(ctx)
 	if err != nil {
@@ -49,7 +49,7 @@ func main() {
 		attribute.String("test.attribute", "test-value"),
 		attribute.String("service.name", "temporal-hello-world"),
 	)
-	log.Printf("[DEBUG] Created test span: TraceID=%s, SpanID=%s", span.SpanContext().TraceID(), span.SpanContext().SpanID())
+	// log.Printf("[DEBUG] Created test span: TraceID=%s, SpanID=%s", span.SpanContext().TraceID(), span.SpanContext().SpanID())
 
 	// Add an event to the span
 	span.AddEvent("test.event", trace.WithAttributes(
@@ -60,14 +60,14 @@ func main() {
 	// Sleep for a moment to allow the span to be exported
 	time.Sleep(2 * time.Second)
 	span.End()
-	log.Println("[DEBUG] Test span completed")
+	// log.Println("[DEBUG] Test span completed")
 
 	// Start the worker in a goroutine
-	log.Println("[DEBUG] Starting worker...")
+	// log.Println("[DEBUG] Starting worker...")
 	go workers.StartWorker()
 
 	// Create client options
-	log.Println("[DEBUG] Creating Temporal client...")
+	// log.Println("[DEBUG] Creating Temporal client...")
 	clientOptions := client.Options{
 		HostPort: client.DefaultHostPort,
 	}
@@ -78,7 +78,7 @@ func main() {
 		log.Fatalln("[ERROR] Unable to create client:", err)
 	}
 	defer c.Close()
-	log.Println("[DEBUG] Temporal client created successfully")
+	// log.Println("[DEBUG] Temporal client created successfully")
 
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        "hello-world-" + fmt.Sprint(time.Now().Unix()),
@@ -95,14 +95,11 @@ func main() {
 	ctx, span = tr.Start(ctx, "ExecuteWorkflow")
 	defer span.End()
 
-	log.Printf("[DEBUG] Starting workflow with name '%s'...\n", name)
-	log.Printf("[DEBUG] Workflow span: TraceID=%s, SpanID=%s", span.SpanContext().TraceID(), span.SpanContext().SpanID())
-
+	fmt.Printf("Starting workflow with input: %s\n", name)
 	we, err := c.ExecuteWorkflow(ctx, workflowOptions, workers.HelloWorldWorkflow, name)
 	if err != nil {
 		log.Fatalln("[ERROR] Unable to execute workflow:", err)
 	}
-	log.Printf("[DEBUG] Workflow started with ID: %s\n", we.GetID())
 
 	// Wait for workflow completion
 	var result string
@@ -110,7 +107,7 @@ func main() {
 	if err != nil {
 		log.Fatalln("[ERROR] Unable to get workflow result:", err)
 	}
-	log.Printf("[DEBUG] Workflow completed successfully with result: %s\n", result)
+	fmt.Printf("Workflow result: %s\n", result)
 
 	// Sleep for a moment to allow final spans to be exported
 	time.Sleep(2 * time.Second)
