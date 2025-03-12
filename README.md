@@ -13,16 +13,18 @@ Before you begin, ensure you have:
 ```
 .
 ├── config/
-│   └── temporal_config.go         # Temporal client configuration
+│   └── temporal_config.go          # Temporal client configuration
 ├── workflows/
-│   ├── workflow.go               # Workflow interface definition
+│   ├── workflow.go                 # Workflow interface definition
 │   └── impl/
 │       └── hello_world_workflow.go # Workflow implementation
 ├── workers/
-│   └── hello_world_worker.go     # Worker process to execute workflows
+│   └── hello_world_worker.go       # Worker process to execute workflows
 ├── starter/
-│   └── hello_world_starter.go    # Workflow starter implementation
-└── main.go                       # Application entry point
+│   └── hello_world_starter.go      # Workflow starter implementation
+├── main.go                         # Application entry point
+├── go.mod                          # Go module definition
+└── go.sum                          # Go module checksums
 ```
 
 ## Configuration Options
