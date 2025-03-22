@@ -52,8 +52,8 @@ func NewTracingExporter(ctx context.Context, cfg *TracingExporterConfig, res *re
 	return tracerProvider, nil
 }
 
-// GetSpanAttributes returns common span attributes for the application
-func GetSpanAttributes(workflowType, workflowID, taskQueue string) map[string]string {
+// GetTracingAttributes returns common span attributes for the application
+func GetTracingAttributes(workflowType, workflowID, taskQueue string) map[string]string {
 	return map[string]string{
 		"workflow.type":       workflowType,
 		"workflow.id":         workflowID,

@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/creator54/temporal-go-demo-app/internal/helloworld/config"
 	"github.com/creator54/temporal-go-demo-app/internal/helloworld/workflow/impl"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -64,6 +65,12 @@ func StartWorker() {
 	}
 	log.Println("[INFO] Worker started successfully")
 
+	// Record worker start as a service restart for metrics
+	config.RecordServiceRestart(ctx, "worker")
+
+	// Start periodic metrics emission for dashboard
+	config.RegisterDashboardMetrics(ctx)
+
 	// Handle graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
@@ -77,6 +84,13 @@ func StartWorker() {
 
 	// Stop accepting new tasks
 	w.Stop()
+
+	// Cleanup metrics resources
+	log.Println("[INFO] Cleaning up metrics resources...")
+	config.Cleanup()
+	
+	// Wait briefly to ensure metrics are exported
+	time.Sleep(1 * time.Second)
 
 	// Wait for in-flight workflows to complete or timeout
 	select {

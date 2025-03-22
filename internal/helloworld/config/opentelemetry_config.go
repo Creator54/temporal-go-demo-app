@@ -73,6 +73,16 @@ func SetupPropagator() {
 	))
 }
 
+// GetSpanAttributes returns a map of common attributes for spans
+func GetSpanAttributes(workflowType, workflowID, taskQueue string) map[string]string {
+	attrs := make(map[string]string)
+	attrs["workflow_type"] = workflowType
+	attrs["workflow_id"] = workflowID
+	attrs["task_queue"] = taskQueue
+	attrs["namespace"] = "default" // Default namespace, can be overridden if needed
+	return attrs
+}
+
 // parseHeaders parses OTEL_EXPORTER_OTLP_HEADERS environment variable
 func parseHeaders() map[string]string {
 	headers := make(map[string]string)

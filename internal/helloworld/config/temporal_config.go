@@ -1,10 +1,14 @@
 package config
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log"
+	"math/rand"
 	"os"
+	"time"
 
 	"go.temporal.io/sdk/client"
 )
@@ -61,4 +65,75 @@ func GetTemporalClientWithOptions(options client.Options) (client.Client, error)
 
 	// Create the client
 	return client.Dial(options)
+}
+
+// RegisterDashboardMetrics registers a timer to periodically emit metrics for dashboard visualization
+func RegisterDashboardMetrics(ctx context.Context) {
+	// Create a ticker that runs every 5 seconds
+	ticker := time.NewTicker(5 * time.Second)
+	// Add a delay for the first time
+	initialDelay := time.NewTimer(1 * time.Second)
+
+	go func() {
+		// Wait for initial delay
+		<-initialDelay.C
+		
+		for {
+			select {
+			case <-ticker.C:
+				// Generate random workflow IDs and run IDs for demo purposes
+				workflowID := fmt.Sprintf("workflow-%d", rand.Int63n(1000))
+				runID := fmt.Sprintf("run-%d", rand.Int63n(1000))
+				namespace := "default"
+				
+				// Record simulated metrics for all workflow states
+				// Success metrics (most common)
+				for i := 0; i < 5; i++ {
+					RecordSuccess(ctx, "HelloWorldWorkflow", workflowID+fmt.Sprintf("-%d", i), runID+fmt.Sprintf("-%d", i), namespace)
+				}
+				
+				// Failure metrics
+				for i := 0; i < 2; i++ {
+					RecordFailure(ctx, "HelloWorldWorkflow", workflowID+fmt.Sprintf("-failed-%d", i), runID+fmt.Sprintf("-failed-%d", i), namespace)
+				}
+				
+				// Timeout metrics
+				RecordTimeout(ctx, "HelloWorldWorkflow", workflowID+"-timeout", runID+"-timeout", namespace)
+				
+				// Termination metrics
+				RecordTermination(ctx, "HelloWorldWorkflow", workflowID+"-terminate", runID+"-terminate", namespace)
+				
+				// Cancellation metrics
+				RecordCancellation(ctx, "HelloWorldWorkflow", workflowID+"-cancel", runID+"-cancel", namespace)
+				
+				// Record various service requests
+				RecordAddActivityTask(ctx)
+				RecordAddWorkflowTask(ctx)
+				RecordResponseActivityCompleted(ctx)
+				RecordRespondWorkflowTaskCompleted(ctx)
+				
+				// Record some errors
+				RecordSystemError(ctx)
+				RecordTimeoutError(ctx)
+				RecordBusinessRuleError(ctx)
+				RecordValidationError(ctx)
+				
+				// Record timeout metrics
+				RecordScheduleToStartWorkflowTimeout(ctx)
+				RecordStartToCloseWorkflowTimeout(ctx)
+				
+				// Record service restarts
+				RecordServiceRestart(ctx, "worker")
+				
+				log.Println("Emitted periodic metrics for dashboard visualization")
+				
+			case <-ctx.Done():
+				ticker.Stop()
+				log.Println("Stopping dashboard metrics emission")
+				return
+			}
+		}
+	}()
+	
+	log.Println("Registered dashboard metrics timer")
 }

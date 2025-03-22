@@ -12,6 +12,7 @@ import (
 	"github.com/creator54/temporal-go-demo-app/internal/helloworld/config"
 	"github.com/creator54/temporal-go-demo-app/internal/helloworld/starter"
 	"github.com/creator54/temporal-go-demo-app/internal/helloworld/worker"
+	"go.opentelemetry.io/otel"
 )
 
 func main() {
@@ -52,6 +53,14 @@ func main() {
 		cleanup()
 	}()
 	log.Println("[INFO] OpenTelemetry initialized successfully")
+
+	// Initialize metrics
+	log.Println("[INFO] Initializing metrics...")
+	meter := otel.GetMeterProvider().Meter("temporal-metrics")
+	if err := config.InitializeMetrics(meter); err != nil {
+		log.Fatalf("[ERROR] Failed to initialize metrics: %v", err)
+	}
+	log.Println("[INFO] Metrics initialized successfully")
 
 	if *workerMode {
 		// Start the worker

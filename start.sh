@@ -9,16 +9,19 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Store the process group ID for later cleanup
+SCRIPT_PGID=$$
+
 # Function to cleanup processes
 cleanup() {
     echo -e "\n${BLUE}Initiating graceful shutdown...${NC}"
     
     if [ ! -z "$WORKER_PID" ]; then
-        echo -e "${YELLOW}Stopping worker process...${NC}"
+        echo -e "${YELLOW}Stopping worker process with PID $WORKER_PID...${NC}"
         kill -SIGTERM $WORKER_PID 2>/dev/null || true
         
         # Wait for graceful shutdown
-        for i in {1..5}; do
+        for i in {1..3}; do
             if ! kill -0 $WORKER_PID 2>/dev/null; then
                 echo -e "${GREEN}Worker stopped gracefully${NC}"
                 break
@@ -33,11 +36,43 @@ cleanup() {
         fi
     fi
 
-    # Cleanup any remaining processes
+    # Very aggressive cleanup to kill ALL related processes
+    echo -e "${YELLOW}Performing complete cleanup of all related processes...${NC}"
+    
+    # Kill by various patterns
     pkill -f "go run ./cmd/helloworld" 2>/dev/null || true
+    pkill -f "cmd/helloworld" 2>/dev/null || true
+    pkill -f "__debug_bin" 2>/dev/null || true
+    pkill -f "go-build" 2>/dev/null || true
+    
+    # Short pause
+    sleep 1
+    
+    # Force kill any remaining processes
+    pkill -9 -f "go run ./cmd/helloworld" 2>/dev/null || true
+    pkill -9 -f "cmd/helloworld" 2>/dev/null || true
+    pkill -9 -f "__debug_bin" 2>/dev/null || true
+    
+    # Find and kill all processes that might be related to our app
+    for pid in $(ps -ef | grep -E '[g]o .*/cmd/helloworld|[c]md/helloworld|[h]ello-world' | awk '{print $2}'); do
+        echo -e "${RED}Killing process $pid${NC}"
+        kill -9 $pid 2>/dev/null || true
+    done
+    
+    # Give processes time to terminate
+    sleep 2
+    
+    # Final check to ensure no processes remain
+    REMAINING=$(ps -ef | grep -E '[g]o .*/cmd/helloworld|[c]md/helloworld|[h]ello-world' | wc -l)
+    if [ $REMAINING -gt 0 ]; then
+        echo -e "${RED}WARNING: $REMAINING processes still running. Attempting harder kill...${NC}"
+        # Try killall as a last resort
+        killall -9 go 2>/dev/null || true
+        # Kill any other processes this script spawned
+        pkill -9 -P $SCRIPT_PGID 2>/dev/null || true
+    fi
     
     echo -e "${GREEN}Cleanup completed${NC}"
-    exit 0
 }
 
 # Function to check worker startup
@@ -60,8 +95,9 @@ check_worker() {
     return 0
 }
 
-# Set up trap for Ctrl+C (SIGINT) and SIGTERM
-trap cleanup SIGINT SIGTERM EXIT
+# Set up trap for Ctrl+C (SIGINT) and SIGTERM, but not EXIT
+# We want to control when cleanup happens
+trap cleanup SIGINT SIGTERM
 
 # Function to check if a port is open
 check_port() {
@@ -101,14 +137,8 @@ if ! command -v go &> /dev/null; then
 fi
 
 # OpenTelemetry Configuration
-export OTEL_EXPORTER_OTLP_PROTOCOL="grpc"
-export OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4317"
-export OTEL_RESOURCE_ATTRIBUTES="service.name=temporal-hello-world,deployment.environment=development"
-export OTEL_TRACES_SAMPLER="always_on"
-export OTEL_METRICS_EXPORTER="otlp"
-export OTEL_LOGS_EXPORTER="otlp"
-export OTEL_PROPAGATORS="tracecontext,baggage"
-export OTEL_SERVICE_NAME="temporal-hello-world"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
+export OTEL_RESOURCE_ATTRIBUTES="service.name=temporal-hello-world"
 
 # If SigNoz ingestion key is provided, set it
 if [ ! -z "$SIGNOZ_INGESTION_KEY" ]; then
@@ -144,9 +174,9 @@ else
     echo -e "${GREEN}✓ OpenTelemetry Collector is running${NC}"
 fi
 
-# Clean existing processes
+# Clean existing processes before starting
 echo -e "\n${BLUE}Preparing environment...${NC}"
-pkill -f "go run ./cmd/helloworld" 2>/dev/null || true
+cleanup
 sleep 2
 
 # Start the worker
@@ -160,6 +190,8 @@ if ! check_worker $WORKER_PID; then
     exit 1
 fi
 
+echo -e "\n${GREEN}✓ Worker is running${NC}"
+
 # Start the workflow
 echo -e "\n${BLUE}Executing workflow...${NC}"
 if WORKFLOW_NAME="Temporal" go run ./cmd/helloworld; then
@@ -169,5 +201,38 @@ else
     exit 1
 fi
 
-echo -e "\n${BLUE}Demo completed successfully${NC}"
-echo -e "${BLUE}════════════════════════════════════════════${NC}" 
+# Let the worker run for a while to send metrics
+echo -e "\n${BLUE}Keeping worker alive to send metrics to SigNoz...${NC}"
+echo -e "${YELLOW}Press Ctrl+C to stop the demo at any time${NC}"
+
+# Progress bar for waiting, longer duration
+METRICS_WAIT_TIME=60  # Keep worker running for 60 seconds to generate metrics
+echo -e "Keeping worker alive for ${METRICS_WAIT_TIME} seconds to generate metrics..."
+
+# Show a progress bar
+for i in $(seq 1 $METRICS_WAIT_TIME); do
+    # Update progress every 5 seconds
+    if [ $((i % 5)) -eq 0 ]; then
+        PERCENT=$((i * 100 / METRICS_WAIT_TIME))
+        echo -ne "\r[${YELLOW}$PERCENT%${NC}] Running worker: $i/$METRICS_WAIT_TIME seconds"
+    fi
+    sleep 1
+done
+echo -e "\n${GREEN}✓ Metrics collection period completed${NC}"
+
+# Now run cleanup to shut everything down
+echo -e "\n${BLUE}Demo completed. Shutting down...${NC}"
+cleanup
+
+# Final sanity check before exiting
+REMAINING=$(ps -ef | grep -E '[g]o .*/cmd/helloworld|[c]md/helloworld|[h]ello-world' | wc -l)
+if [ $REMAINING -gt 0 ]; then
+    echo -e "${RED}WARNING: Still found $REMAINING processes running. Killing all Go processes...${NC}"
+    ps -ef | grep -E '[g]o .*/cmd/helloworld|[c]md/helloworld|[h]ello-world'
+    killall -9 go 2>/dev/null || true
+    pkill -9 -f "helloworld" 2>/dev/null || true
+fi
+
+echo -e "\n${GREEN}✓ Demo completed successfully${NC}"
+echo -e "${BLUE}════════════════════════════════════════════${NC}"
+exit 0 

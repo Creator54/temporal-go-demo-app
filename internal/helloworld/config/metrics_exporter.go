@@ -43,7 +43,7 @@ func NewMetricsExporter(ctx context.Context, cfg *MetricsExporterConfig, res *re
 	// Configure periodic reader with more frequent reporting
 	reader := sdkmetric.NewPeriodicReader(
 		exporter,
-		sdkmetric.WithInterval(10*time.Second),
+		sdkmetric.WithInterval(1*time.Second), // Set to 1 second as per Java implementation
 	)
 
 	// Create meter provider
@@ -63,33 +63,6 @@ func NewMetricsExporter(ctx context.Context, cfg *MetricsExporterConfig, res *re
 
 // RegisterCommonMetrics registers metrics that are common across the application
 func RegisterCommonMetrics(meter metric.Meter, attrs ...attribute.KeyValue) error {
-	// Example metrics (add more as needed)
-	_, err := meter.Int64Counter(
-		"temporal_workflow_completed",
-		metric.WithDescription("Number of completed workflows"),
-		metric.WithUnit("1"),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create workflow completed counter: %w", err)
-	}
-
-	_, err = meter.Int64Counter(
-		"temporal_workflow_started",
-		metric.WithDescription("Number of started workflows"),
-		metric.WithUnit("1"),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create workflow started counter: %w", err)
-	}
-
-	_, err = meter.Int64UpDownCounter(
-		"temporal_worker_task_slots_available",
-		metric.WithDescription("Number of available task slots"),
-		metric.WithUnit("1"),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create task slots counter: %w", err)
-	}
-
-	return nil
+	// Initialize all workflow metrics using our WorkflowMetricsUtil equivalent
+	return InitializeMetrics(meter)
 }
