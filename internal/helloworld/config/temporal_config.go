@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"log"
 	"math/rand"
@@ -26,42 +25,44 @@ func GetTemporalClient() (client.Client, error) {
 // GetTemporalClientWithOptions creates a new Temporal client with custom options
 func GetTemporalClientWithOptions(options client.Options) (client.Client, error) {
 	// Get Temporal address from environment variable or use default
-	address := os.Getenv("TEMPORAL_ADDRESS")
+	address := os.Getenv("TEMPORAL_HOST_URL")
+	log.Printf("[DEBUG] TEMPORAL_HOST_URL value: %q", address)
+	
 	if address == "" {
 		address = "localhost:7233"
+		log.Printf("[DEBUG] Using default address: %q", address)
 	}
 
 	// Check if we need to use TLS
-	if os.Getenv("TEMPORAL_MTLS_TLS_CERT") != "" && os.Getenv("TEMPORAL_MTLS_TLS_KEY") != "" {
-		cert, err := tls.LoadX509KeyPair(
-			os.Getenv("TEMPORAL_MTLS_TLS_CERT"),
-			os.Getenv("TEMPORAL_MTLS_TLS_KEY"),
-		)
+	certPath := os.Getenv("TEMPORAL_TLS_CERT")
+	keyPath := os.Getenv("TEMPORAL_TLS_KEY")
+	log.Printf("[DEBUG] TLS config - Cert: %q, Key: %q", certPath, keyPath)
+	
+	if certPath != "" && keyPath != "" {
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load client cert and key: %w", err)
-		}
-
-		// Load CA cert if provided
-		var certPool *x509.CertPool
-		if caCertPath := os.Getenv("TEMPORAL_MTLS_TLS_CA"); caCertPath != "" {
-			certPool = x509.NewCertPool()
-			caCert, err := os.ReadFile(caCertPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load CA cert: %w", err)
-			}
-			certPool.AppendCertsFromPEM(caCert)
 		}
 
 		options.ConnectionOptions = client.ConnectionOptions{
 			TLS: &tls.Config{
 				Certificates: []tls.Certificate{cert},
-				RootCAs:      certPool,
 			},
 		}
+		log.Println("[DEBUG] TLS configuration applied")
+	}
+
+	// Set the namespace if provided
+	namespace := os.Getenv("TEMPORAL_NAMESPACE")
+	log.Printf("[DEBUG] TEMPORAL_NAMESPACE value: %q", namespace)
+	if namespace != "" {
+		options.Namespace = namespace
+		log.Printf("[DEBUG] Namespace set to: %q", namespace)
 	}
 
 	// Set the address in the options
 	options.HostPort = address
+	log.Printf("[DEBUG] Final connection address: %q", address)
 
 	// Create the client
 	return client.Dial(options)

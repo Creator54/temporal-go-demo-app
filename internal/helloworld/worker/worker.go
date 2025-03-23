@@ -11,7 +11,6 @@ import (
 
 	"github.com/creator54/temporal-go-demo-app/internal/helloworld/config"
 	"github.com/creator54/temporal-go-demo-app/internal/helloworld/workflow/impl"
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -25,13 +24,8 @@ func HelloWorldActivity(ctx context.Context, name string) (string, error) {
 func StartWorker() {
 	log.Println("[INFO] Initializing Temporal worker...")
 
-	// Create the client options
-	clientOptions := client.Options{
-		HostPort: client.DefaultHostPort,
-	}
-
-	// Initialize the Temporal client
-	temporalClient, err := client.NewClient(clientOptions)
+	// Initialize the Temporal client using our custom configuration
+	temporalClient, err := config.GetTemporalClient()
 	if err != nil {
 		log.Fatalf("[ERROR] Unable to create Temporal client: %v", err)
 	}

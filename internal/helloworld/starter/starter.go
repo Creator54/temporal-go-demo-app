@@ -62,13 +62,9 @@ func StartWorkflow(ctx context.Context, name string) error {
 	// Initialize metrics if not already initialized
 	initializeStarterMetrics()
 
-	// Create the client options
-	clientOptions := client.Options{
-		HostPort: client.DefaultHostPort,
-	}
-
-	// Initialize the Temporal client
-	c, err := client.NewClient(clientOptions)
+	log.Println("[DEBUG] Using GetTemporalClient for workflow...")
+	// Initialize the Temporal client using our custom configuration
+	c, err := config.GetTemporalClient()
 	if err != nil {
 		return fmt.Errorf("unable to create client: %w", err)
 	}
@@ -80,6 +76,7 @@ func StartWorkflow(ctx context.Context, name string) error {
 		ID:        workflowID,
 		TaskQueue: "hello-world-task-queue",
 	}
+	log.Printf("[DEBUG] Using task queue: %s", workflowOptions.TaskQueue)
 
 	// Create a tracer
 	tr := otel.GetTracerProvider().Tracer("temporal-workflow")

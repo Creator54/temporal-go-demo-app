@@ -26,19 +26,34 @@ type OpenTelemetryConfig struct {
 // NewOpenTelemetryConfig creates a new OpenTelemetry configuration
 func NewOpenTelemetryConfig() *OpenTelemetryConfig {
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	useTLS := false
+
 	if endpoint == "" {
 		endpoint = "localhost:4317"
 	} else {
-		// Strip http:// or https:// prefix
-		endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+		// Check if this is a cloud endpoint that needs TLS
+		if strings.Contains(endpoint, "https://") || strings.Contains(endpoint, "signoz.cloud") {
+			useTLS = true
+			// For gRPC, we don't need the https:// prefix
+			endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
+		} else {
+			// For non-TLS endpoint
+			endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+		}
 	}
+
+	// Debug output
+	headers := parseHeaders()
+	fmt.Printf("[DEBUG] OTEL endpoint: %s\n", endpoint)
+	fmt.Printf("[DEBUG] OTEL headers: %v\n", headers)
+	fmt.Printf("[DEBUG] OTEL using TLS: %v\n", useTLS)
 
 	return &OpenTelemetryConfig{
 		ServiceName: "temporal-hello-world",
 		Environment: "development",
 		Endpoint:    endpoint,
-		Headers:     parseHeaders(),
-		UseTLS:      false,
+		Headers:     headers,
+		UseTLS:      useTLS,
 	}
 }
 
@@ -59,6 +74,7 @@ func (c *OpenTelemetryConfig) CreateResource(ctx context.Context) (*resource.Res
 
 // GetTLSCredentials returns the appropriate TLS credentials
 func (c *OpenTelemetryConfig) GetTLSCredentials() credentials.TransportCredentials {
+	fmt.Printf("[DEBUG] Getting TLS credentials, UseTLS: %v\n", c.UseTLS)
 	if c.UseTLS {
 		return credentials.NewClientTLSFromCert(nil, "")
 	}

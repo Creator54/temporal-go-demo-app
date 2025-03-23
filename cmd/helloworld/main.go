@@ -76,13 +76,13 @@ func main() {
 		log.Printf("[INFO] Starting workflow with input: %s", name)
 
 		// Create a context with timeout for workflow execution
-		execCtx, execCancel := context.WithTimeout(ctx, 30*time.Second)
+		execCtx, execCancel := context.WithTimeout(ctx, 120*time.Second)
 		defer execCancel()
 
 		// Start the workflow using the context
 		if err := starter.StartWorkflow(execCtx, name); err != nil {
 			if execCtx.Err() == context.DeadlineExceeded {
-				log.Fatalf("[ERROR] Workflow execution timed out after 30 seconds")
+				log.Fatalf("[ERROR] Workflow execution timed out after 120 seconds")
 			}
 			log.Fatalf("[ERROR] Failed to start workflow: %v", err)
 		}
